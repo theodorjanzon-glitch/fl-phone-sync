@@ -1,0 +1,125 @@
+# Builds the Windows .exe and Mac .app. Push a tag like v1.0.0 to publish them as a release.
+# If the Apple secrets are set (README: "Mac signing"), the Mac app is signed and notarized
+# so it opens with a normal double-click.
+name: Build computer app
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            asset: FL-Phone-Sync-Windows.exe
+          - os: macos-latest
+            asset: FL-Phone-Sync-Mac.zip
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pyinstaller pytest
+
+      - name: Run the tests first
+        run: python -m pytest -q
+
+      - name: Insert Google keys (from repository secrets)
+        env:
+          CID: ${{ secrets.GOOGLE_DESKTOP_CLIENT_ID }}
+          CSECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
+        run: |
+          OWNER=$(echo "$GITHUB_REPOSITORY_OWNER" | tr '[:upper:]' '[:lower:]')
+          REPO="${GITHUB_REPOSITORY#*/}"
+          cat > config.py <<EOF
+          GOOGLE_DESKTOP_CLIENT_ID = "${CID}"
+          GOOGLE_DESKTOP_CLIENT_SECRET = "${CSECRET}"
+          WEB_APP_URL = "https://${OWNER}.github.io/${REPO}/"
+          EOF
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name FL-Phone-Sync \
+            --icon ../webapp/icons/icon-512.png --collect-all imageio_ffmpeg flsync.py
+          mv dist/FL-Phone-Sync.exe "dist/${{ matrix.asset }}"
+          "dist/${{ matrix.asset }}" --selftest
+
+      - name: Build (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --noconfirm --windowed --name "FL Phone Sync" --osx-bundle-identifier com.flphonesync.app \
+            --icon ../webapp/icons/icon-512.png --collect-all imageio_ffmpeg flsync.py
+          /usr/libexec/PlistBuddy -c "Add :NSDocumentsFolderUsageDescription string 'FL Phone Sync watches your FL Studio projects for saves and sends new versions to your phone.'" \
+            "dist/FL Phone Sync.app/Contents/Info.plist"
+
+      - name: Sign and notarize (Mac, only if Apple secrets are set)
+        if: runner.os == 'macOS'
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          MAC_SIGN_IDENTITY: ${{ secrets.MAC_SIGN_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          APP="dist/FL Phone Sync.app"
+          if [ -z "$MAC_CERT_P12_BASE64" ]; then
+            echo "::warning::No Apple signing secrets set - the Mac app is unsigned and users must click 'Open Anyway' in System Settings."
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/build.keychain-db"
+          security create-keychain -p ci "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p ci "$KC"
+          echo "$MAC_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KC" -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+
+          sign() { codesign --force --timestamp --options runtime \
+                     --entitlements mac/entitlements.plist --sign "$MAC_SIGN_IDENTITY" "$1"; }
+          # inside-out: every Mach-O binary, then nested frameworks, then the app
+          while IFS= read -r -d '' f; do
+            if file "$f" | grep -q "Mach-O"; then sign "$f"; fi
+          done < <(find "$APP/Contents" -type f -print0)
+          while IFS= read -r -d '' f; do sign "$f"; done < <(find "$APP/Contents" -name "*.framework" -type d -print0)
+          sign "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/notarize.zip"
+          RESULT=$(xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --apple-id "$APPLE_ID" \
+                   --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait --output-format json)
+          echo "$RESULT"
+          if ! echo "$RESULT" | grep -Eq '"status" ?: ?"Accepted"'; then
+            ID=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+            xcrun notarytool log "$ID" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
+            exit 1
+          fi
+          xcrun stapler staple "$APP"
+          spctl --assess --type execute --verbose "$APP"
+
+      - name: Package (Mac)
+        if: runner.os == 'macOS'
+        run: |
+          "dist/FL Phone Sync.app/Contents/MacOS/FL Phone Sync" --selftest
+          cd dist && ditto -c -k --keepParent "FL Phone Sync.app" "${{ matrix.asset }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: desktop/dist/${{ matrix.asset }}
+      - name: Attach to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: desktop/dist/${{ matrix.asset }}

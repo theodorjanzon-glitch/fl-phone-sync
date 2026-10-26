@@ -1,0 +1,63 @@
+# Tests the computer app on real Mac and Windows machines on every push.
+# Results: Actions tab -> "Test on Mac and Windows" -> latest run. Screenshots are under "Artifacts".
+name: Test on Mac and Windows
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest pyinstaller
+
+      - name: 1. Sync engine tests (change detection, render, encode, upload, start-up)
+        run: python -m pytest -v
+
+      - name: 2. Open the real window from source (and encode a test tone)
+        env:
+          FLPS_SCREENSHOT_DIR: ${{ github.workspace }}/screenshots/source
+        run: |
+          mkdir -p "$FLPS_SCREENSHOT_DIR"
+          python flsync.py --selftest
+
+      - name: 3. Build the app like a release
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            pyinstaller --noconfirm --windowed --name "FL Phone Sync" --osx-bundle-identifier com.flphonesync.app \
+              --icon ../webapp/icons/icon-512.png --collect-all imageio_ffmpeg flsync.py
+          else
+            pyinstaller --noconfirm --onefile --windowed --name FL-Phone-Sync \
+              --icon ../webapp/icons/icon-512.png --collect-all imageio_ffmpeg flsync.py
+          fi
+
+      - name: 4. Launch the built app (also encodes a test tone with the bundled ffmpeg)
+        env:
+          FLPS_SCREENSHOT_DIR: ${{ github.workspace }}/screenshots/built-app
+        run: |
+          mkdir -p "$FLPS_SCREENSHOT_DIR"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            "dist/FL Phone Sync.app/Contents/MacOS/FL Phone Sync" --selftest
+          else
+            ./dist/FL-Phone-Sync.exe --selftest
+          fi
+          ls -la "$FLPS_SCREENSHOT_DIR"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots-${{ matrix.os }}
+          path: screenshots

@@ -1,0 +1,33 @@
+# Puts the phone app online at https://<your-name>.github.io/<repo>/ on every push to main.
+name: Publish phone app
+on:
+  push:
+    branches: [main]
+    paths: ["webapp/**", ".github/workflows/publish-phone-app.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Insert Google key and download links
+        env:
+          CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+        run: |
+          sed -i "s|PASTE_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com|${CLIENT_ID}|; s|YOUR-GITHUB-NAME/fl-phone-sync|${GITHUB_REPOSITORY}|" webapp/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: webapp
+      - id: deploy
+        uses: actions/deploy-pages@v4
