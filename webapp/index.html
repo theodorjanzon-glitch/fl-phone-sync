@@ -1,0 +1,699 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FL Phone Sync</title>
+<meta name="theme-color" content="#1D2029" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#E6E9EF" media="(prefers-color-scheme: light)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FL Sync">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root {
+  --bg: #E6E9EF; --surface: #F6F7FA; --pad: #CBD1DC; --pad-edge: #B9C0CD;
+  --text: #1D2230; --muted: #5D6578; --accent: #D98A12; --accent-soft: rgba(217,138,18,.18);
+  --on-accent: #1D2029; --line: rgba(29,34,48,.12); --danger: #B3352E;
+  --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+  --body: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+  box-sizing: border-box;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1D2029; --surface: #272B36; --pad: #363B48; --pad-edge: #2E323E;
+    --text: #ECE7DD; --muted: #9AA0AE; --accent: #FFB547; --accent-soft: rgba(255,181,71,.16);
+    --on-accent: #1D2029; --line: rgba(236,231,221,.09); --danger: #FF7A70;
+    color-scheme: dark;
+  }
+}
+*, *::before, *::after { box-sizing: inherit; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body {
+  font: 400 16px/1.45 var(--body);
+  min-height: 100dvh;
+  padding: env(safe-area-inset-top, 0px) 0 calc(96px + env(safe-area-inset-bottom, 0px));
+  -webkit-tap-highlight-color: transparent;
+}
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 0 18px; }
+
+/* header */
+.top { display: flex; align-items: flex-end; justify-content: space-between; padding: 22px 0 14px; }
+.top h1 { font: 600 34px/1 var(--display); letter-spacing: -.01em; margin: 0; }
+.top .count { font: 500 15px var(--display); color: var(--muted); margin-left: 8px; }
+.avatar {
+  width: 38px; height: 38px; border-radius: 50%; background: var(--pad);
+  font: 600 15px var(--display); display: grid; place-items: center;
+}
+.tools { display: flex; gap: 8px; margin-bottom: 10px; }
+.search {
+  flex: 1; min-width: 0; height: 42px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--text); padding: 0 14px; font: inherit;
+}
+.search::placeholder { color: var(--muted); }
+.sort { display: flex; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+.sort button { padding: 0 12px; border-radius: 7px; font-size: 14px; color: var(--muted); }
+.sort button[aria-pressed="true"] { background: var(--pad); color: var(--text); }
+
+.banner {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 14px; margin: 4px 0 12px; border-radius: 10px; background: var(--accent-soft); font-size: 15px;
+}
+.banner button { font-weight: 500; white-space: nowrap; text-decoration: underline; text-underline-offset: 3px; }
+.status { color: var(--muted); font-size: 14px; min-height: 20px; margin: 0 0 6px; }
+
+/* list */
+.list { list-style: none; margin: 0; padding: 0; }
+.track {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px;
+  width: 100%; text-align: left; padding: 14px 4px; border-bottom: 1px solid var(--line);
+}
+.track .name { font: 500 18px/1.25 var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track .meta { grid-column: 1; color: var(--muted); font-size: 14px; display: flex; gap: 14px; }
+.track .side { grid-row: 1 / span 2; grid-column: 2; display: flex; align-items: center; gap: 10px; }
+.track .fresh { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.track .saved { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+.track[aria-current="true"] .name { color: var(--accent); }
+.empty { padding: 48px 4px; color: var(--muted); }
+.empty h2 { font: 600 22px var(--display); color: var(--text); margin: 0 0 8px; }
+
+/* welcome */
+.welcome { padding: 10vh 0 0; }
+.welcome .grid-art { width: 132px; margin-bottom: 28px; }
+.welcome h2 { font: 600 36px/1.05 var(--display); margin: 0 0 14px; max-width: 12ch; }
+.welcome p { color: var(--muted); max-width: 34ch; margin: 0 0 28px; }
+.get { margin-top: 44px; padding-top: 24px; border-top: 1px solid var(--line); }
+.get h3 { font: 600 20px var(--display); margin: 0 0 6px; }
+.get p { margin-bottom: 16px; }
+.dl { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn.ghost { background: var(--surface); color: var(--text); border: 1px solid var(--line); text-decoration: none; }
+.btn.ghost[aria-current="true"] { border-color: var(--accent); }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px; height: 48px; padding: 0 22px; border-radius: 12px;
+  background: var(--accent); color: var(--on-accent); font-weight: 500;
+}
+
+/* pad grid (shared by art + player) */
+.pads { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.pad {
+  aspect-ratio: 1; border-radius: 14%; background: var(--pad);
+  box-shadow: inset 0 -3px 0 var(--pad-edge);
+  background-image: linear-gradient(to top, var(--accent) calc(var(--fill, 0) * 100%), transparent 0);
+  transition: box-shadow .2s;
+}
+.pad.lit { box-shadow: inset 0 -3px 0 rgba(0,0,0,.18), 0 0 18px var(--accent-soft); }
+.grid-art .pads { gap: 6px; }
+
+/* mini player */
+.mini {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+  background: var(--surface); border-top: 1px solid var(--line);
+  padding: 0 0 env(safe-area-inset-bottom, 0px);
+  transform: translateY(110%); transition: transform .25s ease;
+}
+.mini.show { transform: none; }
+.mini .strip { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; height: 4px; }
+.mini .strip i { background: var(--pad); }
+.mini .strip i.on { background: var(--accent); }
+.mini .row { max-width: 640px; margin: 0 auto; display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
+.mini .title { flex: 1; min-width: 0; text-align: left; font: 500 16px var(--display); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mini .title small { display: block; font: 400 13px var(--body); color: var(--muted); }
+.round {
+  width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center;
+  background: var(--accent); color: var(--on-accent); flex: none;
+}
+.round svg { width: 20px; height: 20px; }
+
+/* full player sheet */
+.sheet {
+  position: fixed; inset: 0; z-index: 10; background: var(--bg); overflow-y: auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) 0 calc(env(safe-area-inset-bottom, 0px) + 24px);
+  transform: translateY(100%); transition: transform .3s cubic-bezier(.2,.8,.2,1); visibility: hidden;
+}
+.sheet.open { transform: none; visibility: visible; }
+.sheet .close { display: block; margin: 0 auto 10px; width: 48px; height: 28px; position: relative; }
+.sheet .close::before { content: ""; position: absolute; inset: 11px 6px; border-radius: 3px; background: var(--pad); }
+.sheet h2 { font: 600 28px/1.1 var(--display); margin: 8px 0 6px; overflow-wrap: anywhere; }
+.sheet .sub { color: var(--muted); font-size: 15px; margin: 0 0 22px; }
+.sheet .pads { gap: 10px; max-width: 420px; margin: 0 auto; }
+.times { display: flex; justify-content: space-between; color: var(--muted); font: 500 14px var(--display);
+  max-width: 420px; margin: 12px auto 0; font-variant-numeric: tabular-nums; }
+.controls { display: flex; justify-content: center; align-items: center; gap: 34px; margin: 18px 0 30px; }
+.controls .skip { width: 48px; height: 48px; display: grid; place-items: center; font: 600 13px var(--display); color: var(--muted); }
+.controls .skip svg { width: 26px; height: 26px; }
+.controls .round { width: 68px; height: 68px; }
+.controls .round svg { width: 28px; height: 28px; }
+.versions h3 { font: 600 18px var(--display); margin: 0 0 4px; }
+.versions p { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+.versions button { display: flex; justify-content: space-between; width: 100%; padding: 12px 2px; border-bottom: 1px solid var(--line); text-align: left; }
+.versions button span:last-child { color: var(--muted); font-size: 14px; }
+.versions button[aria-current="true"] { color: var(--accent); }
+
+/* account menu */
+.menu { position: fixed; inset: 0; z-index: 20; background: rgba(0,0,0,.35); display: none; align-items: flex-end; }
+.menu.open { display: flex; }
+.menu .card { width: 100%; max-width: 640px; margin: 0 auto; background: var(--surface); border-radius: 18px 18px 0 0;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom, 0px)); }
+.menu .who { color: var(--muted); font-size: 14px; margin: 0 0 8px; }
+.menu .card button { display: block; width: 100%; text-align: left; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.menu .card button.danger { color: var(--danger); border: 0; }
+
+.toast {
+  position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom, 0px)); z-index: 30;
+  transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 10px;
+  font-size: 14px; max-width: calc(100% - 36px); opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+.spin { animation: pulse 1s ease-in-out infinite alternate; }
+@keyframes pulse { from { opacity: .45; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .mini, .pad { transition: none; } .spin { animation: none; }
+}
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+
+<main class="wrap">
+  <section id="welcome" class="welcome" hidden>
+    <div class="grid-art" aria-hidden="true"><div class="pads" id="artPads"></div></div>
+    <h2>Your FL tracks, on your phone</h2>
+    <p id="welcomeText">Sign in with the same Google account on your computer and here. Every project you save in FL Studio shows up automatically.</p>
+    <div class="cta">
+      <button class="btn" id="signInBig">Sign in with Google</button>
+    </div>
+    <div class="get" id="getDesktop">
+      <h3>Get the computer app</h3>
+      <p>It runs in the background and sends every FL save to your phone.</p>
+      <div class="dl">
+        <a class="btn ghost" id="dlWin">Download for Windows</a>
+        <a class="btn ghost" id="dlMac">Download for Mac</a>
+      </div>
+    </div>
+    <p id="setupNote" class="status" hidden></p>
+  </section>
+
+  <section id="library" hidden>
+    <header class="top">
+      <h1>Tracks<span class="count" id="count"></span></h1>
+      <button class="avatar" id="avatar" aria-label="Account"></button>
+    </header>
+    <div id="banner" class="banner" hidden>
+      <span>Sign in to check for new versions.</span>
+      <button id="signInSmall">Sign in</button>
+    </div>
+    <div class="tools">
+      <input class="search" id="search" type="search" placeholder="Find a track" autocomplete="off" aria-label="Find a track">
+      <div class="sort" role="group" aria-label="Sort">
+        <button data-sort="recent">Recent</button>
+        <button data-sort="az">A–Z</button>
+      </div>
+    </div>
+    <p class="status" id="status" aria-live="polite"></p>
+    <ul class="list" id="list"></ul>
+    <div class="empty" id="empty" hidden></div>
+  </section>
+</main>
+
+<div class="mini" id="mini">
+  <div class="strip" id="strip" aria-hidden="true"></div>
+  <div class="row">
+    <button class="title" id="miniOpen"><span id="miniTitle"></span><small id="miniSub"></small></button>
+    <button class="round" id="miniPlay" aria-label="Play"></button>
+  </div>
+</div>
+
+<section class="sheet" id="sheet" aria-label="Now playing">
+  <div class="wrap">
+    <button class="close" id="sheetClose" aria-label="Close player"></button>
+    <h2 id="npTitle"></h2>
+    <p class="sub" id="npSub"></p>
+    <div class="pads" id="pads" role="group" aria-label="Position. Tap a pad to jump there."></div>
+    <div class="times"><span id="tNow">0:00</span><span id="tDur">0:00</span></div>
+    <div class="controls">
+      <button class="skip" id="back" aria-label="Back 10 seconds">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+      </button>
+      <button class="round" id="bigPlay" aria-label="Play"></button>
+      <button class="skip" id="fwd" aria-label="Forward 10 seconds">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>
+      </button>
+    </div>
+    <div class="versions" id="versions"></div>
+  </div>
+</section>
+
+<div class="menu" id="menu">
+  <div class="card" role="dialog" aria-label="Account">
+    <p class="who" id="who"></p>
+    <button id="refreshBtn">Check for new versions</button>
+    <button id="offlineAll">Save all tracks for offline</button>
+    <button id="signOut" class="danger">Sign out</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+<audio id="audio" preload="auto" playsinline></audio>
+
+<script>
+/* ------------------------------------------------------------------ setup --
+   Paste the Web client ID from Google Cloud (README step 3). */
+const CLIENT_ID = "PASTE_YOUR_WEB_CLIENT_ID.apps.googleusercontent.com";
+const GITHUB_REPO = "YOUR-GITHUB-NAME/fl-phone-sync";   // where the computer app is released
+const DOWNLOAD_WINDOWS = `https://github.com/${GITHUB_REPO}/releases/latest/download/FL-Phone-Sync-Windows.exe`;
+const DOWNLOAD_MAC = `https://github.com/${GITHUB_REPO}/releases/latest/download/FL-Phone-Sync-Mac.zip`;
+const SCOPES = "https://www.googleapis.com/auth/drive.file";
+const FOLDER_NAME = "FL Phone Sync";
+const AUDIO_CACHE = "flps-audio-v1";
+const API = "https://www.googleapis.com/drive/v3";
+
+const $ = (id) => document.getElementById(id);
+const audio = $("audio");
+const ICON_PLAY = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg>';
+const ICON_PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="5.5" y="4" width="4.5" height="16" rx="1"/><rect x="14" y="4" width="4.5" height="16" rx="1"/></svg>';
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} },
+};
+
+const state = {
+  token: store.get("flps.token", null),
+  user: store.get("flps.user", null),
+  tracks: store.get("flps.tracks", []),
+  seen: store.get("flps.seen", {}),
+  sort: store.get("flps.sort", "recent"),
+  query: "",
+  current: null,      // track object
+  rev: null,          // revision being played, or null for latest
+  revisions: [],
+  offline: new Set(),
+  loading: false,
+};
+let objectUrl = null;
+
+class AuthError extends Error { constructor() { super("auth"); } }
+
+/* ------------------------------------------------------------- google auth */
+let tokenClient = null, pending = null;
+function gisReady() {
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    (function wait() {
+      if (window.google?.accounts?.oauth2) return resolve();
+      if (Date.now() - t0 > 10000) return reject(new Error("Google sign-in didn't load. Check your connection."));
+      setTimeout(wait, 100);
+    })();
+  });
+}
+async function requestToken() {
+  await gisReady();
+  if (!tokenClient) {
+    tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID, scope: SCOPES,
+      callback: (r) => {
+        if (r.error) return pending?.reject(new Error(r.error_description || r.error));
+        state.token = { value: r.access_token, exp: Date.now() + (r.expires_in - 60) * 1000 };
+        store.set("flps.token", state.token);
+        pending?.resolve();
+      },
+      error_callback: (e) => pending?.reject(new Error(e.type === "popup_closed" ? "Sign-in was closed." : "Sign-in failed.")),
+    });
+  }
+  return new Promise((resolve, reject) => {
+    pending = { resolve, reject };
+    tokenClient.requestAccessToken({ prompt: state.user ? "" : "select_account", login_hint: state.user?.emailAddress || "" });
+  });
+}
+const tokenValid = () => state.token && state.token.exp > Date.now();
+
+async function signIn() {
+  if (CLIENT_ID.startsWith("PASTE_")) { toast("Add your Google client ID to index.html first (README step 3)."); return; }
+  try { await requestToken(); showLibrary(); await refresh(); }
+  catch (e) { toast(e.message); }
+}
+function signOut() {
+  if (state.token && window.google?.accounts?.oauth2) google.accounts.oauth2.revoke(state.token.value, () => {});
+  ["flps.token", "flps.user", "flps.tracks", "flps.folder"].forEach(store.del);
+  Object.assign(state, { token: null, user: null, tracks: [] });
+  audio.pause(); state.current = null;
+  if ("caches" in window) caches.delete(AUDIO_CACHE);
+  state.offline.clear();
+  closeMenu(); $("mini").classList.remove("show"); route();
+}
+
+/* ------------------------------------------------------------------ drive */
+async function api(path, raw = false) {
+  if (!tokenValid()) throw new AuthError();
+  const res = await fetch(path.startsWith("http") ? path : API + path, {
+    headers: { Authorization: `Bearer ${state.token.value}` },
+  });
+  if (res.status === 401) { state.token = null; store.del("flps.token"); throw new AuthError(); }
+  if (!res.ok) throw new Error(`Google Drive answered ${res.status}`);
+  return raw ? res : res.json();
+}
+
+function toTrack(f) {
+  const p = f.appProperties || {};
+  return {
+    id: f.id,
+    title: p.project || f.name.replace(/\.[^.]+$/, ""),
+    saved: p.saved || f.modifiedTime,
+    modified: f.modifiedTime,
+    size: Number(f.size || 0),
+    ver: f.md5Checksum || f.modifiedTime,
+    mime: f.mimeType || "audio/mp4",
+  };
+}
+
+async function refresh() {
+  if (!tokenValid()) { renderAll(); return; }
+  setStatus("Checking Google Drive…");
+  try {
+    if (!state.user) {
+      state.user = (await api("/about?fields=user(displayName,emailAddress)")).user;
+      store.set("flps.user", state.user);
+    }
+    const fq = encodeURIComponent(`name='${FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    const folder = (await api(`/files?q=${fq}&fields=files(id)`)).files[0];
+    if (!folder) { state.tracks = []; store.set("flps.tracks", []); setStatus(""); renderAll("nofolder"); return; }
+    const q = encodeURIComponent(`'${folder.id}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'`);
+    const fields = "nextPageToken,files(id,name,mimeType,modifiedTime,size,md5Checksum,appProperties)";
+    let files = [], page = "";
+    do {
+      const r = await api(`/files?q=${q}&orderBy=modifiedTime desc&pageSize=200&fields=${fields}${page ? "&pageToken=" + page : ""}`);
+      files.push(...r.files); page = r.nextPageToken || "";
+    } while (page);
+    state.tracks = files.map(toTrack);
+    store.set("flps.tracks", state.tracks);
+    if (state.current) state.current = state.tracks.find((t) => t.id === state.current.id) || state.current;
+    await loadOfflineSet();
+    setStatus("");
+    renderAll();
+  } catch (e) {
+    if (e instanceof AuthError) { setStatus(""); renderAll(); }
+    else setStatus("Can't reach Google Drive right now. Showing your saved list.");
+  }
+}
+
+/* ---------------------------------------------------------- offline audio */
+const cacheKey = (id, ver) => `${location.origin}/__audio/${id}/${encodeURIComponent(ver)}`;
+async function loadOfflineSet() {
+  state.offline.clear();
+  if (!("caches" in window)) return;
+  const cache = await caches.open(AUDIO_CACHE);
+  for (const req of await cache.keys()) {
+    const m = new URL(req.url).pathname.match(/^\/__audio\/([^/]+)\/(.+)$/);
+    if (m) state.offline.add(`${m[1]}:${decodeURIComponent(m[2])}`);
+  }
+}
+const isOffline = (t) => state.offline.has(`${t.id}:${t.ver}`);
+
+async function trackBlob(t) {
+  const cache = "caches" in window ? await caches.open(AUDIO_CACHE) : null;
+  const key = cacheKey(t.id, t.ver);
+  const hit = cache && await cache.match(key);
+  if (hit) return hit.blob();
+  const blob = await (await api(`/files/${t.id}?alt=media`, true)).blob();
+  if (cache) {
+    for (const req of await cache.keys()) {          // drop older versions of this track
+      if (new URL(req.url).pathname.startsWith(`/__audio/${t.id}/`)) await cache.delete(req);
+    }
+    await cache.put(key, new Response(blob, { headers: { "Content-Type": t.mime } }));
+    [...state.offline].filter((k) => k.startsWith(t.id + ":")).forEach((k) => state.offline.delete(k));
+    state.offline.add(`${t.id}:${t.ver}`);
+  }
+  return blob;
+}
+
+async function saveAllOffline() {
+  closeMenu();
+  const todo = state.tracks.filter((t) => !isOffline(t));
+  if (!todo.length) { toast("Every track is already saved for offline."); return; }
+  let done = 0;
+  for (const t of todo) {
+    setStatus(`Saving for offline: ${done + 1} of ${todo.length}`);
+    try { await trackBlob(t); done++; renderList(); }
+    catch (e) { if (e instanceof AuthError) { toast("Sign in again to keep saving."); break; } }
+  }
+  setStatus("");
+  toast(`Saved ${done} track${done === 1 ? "" : "s"} for offline.`);
+}
+
+/* ---------------------------------------------------------------- player */
+// iOS only allows audio started by a tap; play a silent clip on the first tap to unlock the player.
+function silentWav() {
+  const b = new ArrayBuffer(46), v = new DataView(b), s = (o, t) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  s(0, "RIFF"); v.setUint32(4, 38, true); s(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true); v.setUint32(24, 8000, true); v.setUint32(28, 16000, true); v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true); s(36, "data"); v.setUint32(40, 2, true); v.setUint16(44, 0, true);
+  return URL.createObjectURL(new Blob([b], { type: "audio/wav" }));
+}
+let unlocked = false;
+function unlockAudio() {
+  if (unlocked) return; unlocked = true;
+  if (audio.src) return;
+  audio.src = silentWav(); audio.play().then(() => audio.pause()).catch(() => {});
+}
+
+async function play(t, rev = null) {
+  unlockAudio();
+  if (state.current?.id !== t.id) { state.revisions = []; }
+  state.current = t; state.rev = rev; state.loading = true;
+  renderPlayer(); renderList();
+  try {
+    const blob = rev
+      ? await (await api(`/files/${t.id}/revisions/${rev.id}?alt=media`, true)).blob()
+      : await trackBlob(t);
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    objectUrl = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: t.mime }));
+    audio.src = objectUrl;
+    audio.dataset.track = loadedKey(t, rev);
+    state.seen[t.id] = t.modified; store.set("flps.seen", state.seen);
+    setMediaSession(t);
+    await audio.play().catch(() => {});      // if blocked, the play button still works
+  } catch (e) {
+    toast(e instanceof AuthError ? "Sign in to play tracks that aren't saved offline." : "Couldn't load this track. Check your connection.");
+  } finally {
+    state.loading = false; renderPlayer(); renderList();
+  }
+  if ($("sheet").classList.contains("open")) loadRevisions();
+}
+
+const loadedKey = (t, rev) => t.id + ":" + (rev ? rev.id : "latest");
+const isLoaded = () => state.current && audio.dataset.track === loadedKey(state.current, state.rev);
+function togglePlay() {
+  if (!state.current || state.loading) return;
+  if (!isLoaded()) return play(state.current, state.rev);
+  audio.paused ? audio.play() : audio.pause();
+}
+function seekBy(s) { if (audio.duration) audio.currentTime = Math.min(Math.max(0, audio.currentTime + s), audio.duration - 0.1); }
+
+function setMediaSession(t) {
+  if (!("mediaSession" in navigator)) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: t.title, artist: "FL Phone Sync",
+    artwork: [{ src: "icons/icon-512.png", sizes: "512x512", type: "image/png" }],
+  });
+  const ms = navigator.mediaSession;
+  ms.setActionHandler("play", () => audio.play());
+  ms.setActionHandler("pause", () => audio.pause());
+  ms.setActionHandler("seekbackward", () => seekBy(-10));
+  ms.setActionHandler("seekforward", () => seekBy(10));
+  ms.setActionHandler("previoustrack", () => step(-1));
+  ms.setActionHandler("nexttrack", () => step(1));
+  try { ms.setActionHandler("seekto", (d) => { audio.currentTime = d.seekTime; }); } catch {}
+}
+function step(dir) {
+  if (!isLoaded()) return;
+  const list = visibleTracks(); const i = list.findIndex((t) => t.id === state.current?.id);
+  const next = list[i + dir]; if (next) play(next);
+}
+audio.addEventListener("ended", () => { if (!state.rev) step(1); });
+
+async function loadRevisions() {
+  const t = state.current; const box = $("versions");
+  if (!t) return;
+  if (!tokenValid()) { box.innerHTML = ""; return; }
+  try {
+    const r = await api(`/files/${t.id}/revisions?fields=revisions(id,modifiedTime,size)&pageSize=50`);
+    if (state.current?.id !== t.id) return;
+    state.revisions = (r.revisions || []).reverse();
+    renderVersions();
+  } catch { box.innerHTML = ""; }
+}
+
+/* ---------------------------------------------------------------- render */
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function ago(iso) {
+  const s = (Date.now() - new Date(iso)) / 1000;
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  if (s < 86400 * 7) return `${Math.floor(s / 86400)} d ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short", year: s > 86400 * 300 ? "numeric" : undefined });
+}
+const mb = (n) => n ? `${(n / 1e6).toFixed(1)} MB` : "";
+const clock = (s) => !isFinite(s) ? "0:00" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+
+function visibleTracks() {
+  const q = state.query.trim().toLowerCase();
+  let list = state.tracks.filter((t) => !q || t.title.toLowerCase().includes(q));
+  if (state.sort === "az") list = [...list].sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }));
+  return list;
+}
+
+function renderList() {
+  const list = visibleTracks();
+  $("count").textContent = state.tracks.length ? state.tracks.length : "";
+  $("list").innerHTML = list.map((t) => {
+    const fresh = state.seen[t.id] !== t.modified;
+    const cur = state.current?.id === t.id;
+    return `<li><button class="track" data-id="${t.id}" aria-current="${cur}">
+      <span class="name">${esc(t.title)}</span>
+      <span class="meta"><span>Saved ${ago(t.saved)}</span><span>${mb(t.size)}</span></span>
+      <span class="side">${isOffline(t) ? '<span class="saved">Offline</span>' : ""}${fresh ? '<span class="fresh" title="New version"></span>' : ""}</span>
+    </button></li>`;
+  }).join("");
+  const empty = $("empty");
+  if (!state.tracks.length) {
+    empty.hidden = false;
+    empty.innerHTML = `<h2>No tracks yet</h2><p>Install FL Phone Sync on your computer and sign in with ${esc(state.user?.emailAddress || "this Google account")}. The next project you save in FL Studio appears here.</p>
+      <div class="dl"><a class="btn ghost" href="${DOWNLOAD_WINDOWS}">Windows app</a><a class="btn ghost" href="${DOWNLOAD_MAC}">Mac app</a></div>`;
+  } else if (!list.length) {
+    empty.hidden = false;
+    empty.innerHTML = `<p>No track matches “${esc(state.query)}”.</p>`;
+  } else empty.hidden = true;
+  document.querySelectorAll(".sort button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.sort === state.sort));
+}
+
+function renderPads() {
+  const p = audio.duration ? audio.currentTime / audio.duration : 0;
+  const pos = p * 16;
+  document.querySelectorAll("#pads .pad").forEach((el, i) => {
+    const fill = Math.max(0, Math.min(1, pos - i));
+    el.style.setProperty("--fill", fill);
+    el.classList.toggle("lit", fill >= 1);
+  });
+  document.querySelectorAll("#strip i").forEach((el, i) => el.classList.toggle("on", i < Math.ceil(pos)));
+  $("tNow").textContent = clock(audio.currentTime);
+  $("tDur").textContent = clock(audio.duration);
+}
+
+function renderPlayer() {
+  const t = state.current;
+  $("mini").classList.toggle("show", !!t);
+  if (!t) return;
+  const sub = state.loading ? "Loading…" : state.rev ? `Older version from ${ago(state.rev.modifiedTime)}` : `Saved ${ago(t.saved)}`;
+  $("miniTitle").textContent = t.title; $("npTitle").textContent = t.title;
+  $("miniSub").textContent = sub; $("npSub").textContent = sub;
+  $("miniSub").classList.toggle("spin", state.loading); $("npSub").classList.toggle("spin", state.loading);
+  const icon = audio.paused ? ICON_PLAY : ICON_PAUSE;
+  $("miniPlay").innerHTML = icon; $("bigPlay").innerHTML = icon;
+  $("miniPlay").setAttribute("aria-label", audio.paused ? "Play" : "Pause");
+  $("bigPlay").setAttribute("aria-label", audio.paused ? "Play" : "Pause");
+  renderPads();
+}
+
+function renderVersions() {
+  const box = $("versions"); const revs = state.revisions;
+  if (revs.length < 2) { box.innerHTML = ""; return; }
+  box.innerHTML = `<h3>Versions</h3><p>Google Drive keeps older uploads for about 30 days.</p>` +
+    revs.map((r, i) => {
+      const cur = i === 0 ? !state.rev : state.rev?.id === r.id;
+      return `<button data-rev="${r.id}" aria-current="${cur}"><span>${i === 0 ? "Latest" : new Date(r.modifiedTime).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}</span><span>${ago(r.modifiedTime)}</span></button>`;
+    }).join("");
+}
+
+function renderAll(reason) {
+  renderList(); renderPlayer();
+  $("banner").hidden = tokenValid() || !state.user;
+  $("avatar").textContent = (state.user?.displayName || state.user?.emailAddress || "?").trim()[0].toUpperCase();
+}
+
+function setupDownloads() {
+  $("dlWin").href = DOWNLOAD_WINDOWS; $("dlMac").href = DOWNLOAD_MAC;
+  const ua = navigator.userAgent;
+  const mobile = /iPhone|iPad|iPod|Android/i.test(ua) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(ua));
+  if (/Windows/.test(ua)) $("dlWin").setAttribute("aria-current", "true");
+  if (/Macintosh/.test(ua) && !mobile) $("dlMac").setAttribute("aria-current", "true");
+  if (mobile) {   // on a phone, the computer app is secondary
+    $("getDesktop").querySelector("p").textContent = "Install it on the computer you make music on, and sign in with the same Google account.";
+  }
+}
+
+function route() {
+  const known = state.user || state.tracks.length;
+  $("welcome").hidden = !!known; $("library").hidden = !known;
+  if (CLIENT_ID.startsWith("PASTE_")) {
+    const n = $("setupNote"); n.hidden = false;
+    n.textContent = "Setup needed: add your Google Web client ID at the top of index.html.";
+  }
+  if (known) renderAll();
+}
+function showLibrary() { $("welcome").hidden = true; $("library").hidden = false; renderAll(); }
+
+let toastTimer;
+function toast(msg) { const el = $("toast"); el.textContent = msg; el.classList.add("show"); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove("show"), 3200); }
+function setStatus(msg) { $("status").textContent = msg; }
+function openMenu() { $("who").textContent = state.user ? `Signed in as ${state.user.emailAddress}` : "Not signed in"; $("signOut").hidden = !state.user; $("menu").classList.add("open"); }
+function closeMenu() { $("menu").classList.remove("open"); }
+function openSheet() { $("sheet").classList.add("open"); renderPlayer(); renderVersions(); loadRevisions(); }
+function closeSheet() { $("sheet").classList.remove("open"); }
+
+/* ---------------------------------------------------------------- events */
+function buildPads() {
+  $("pads").innerHTML = Array.from({ length: 16 }, (_, i) => `<button class="pad" data-i="${i}" aria-label="Jump to ${Math.round(i / 16 * 100)}%"></button>`).join("");
+  $("strip").innerHTML = "<i></i>".repeat(16);
+  $("artPads").innerHTML = Array.from({ length: 16 }, (_, i) => `<span class="pad" style="--fill:${i < 11 ? 1 : i === 11 ? .55 : 0}"></span>`).join("");
+}
+
+document.addEventListener("pointerdown", unlockAudio, { once: true });
+$("signInBig").onclick = signIn;
+$("signInSmall").onclick = signIn;
+$("avatar").onclick = openMenu;
+$("menu").onclick = (e) => { if (e.target === $("menu")) closeMenu(); };
+$("refreshBtn").onclick = async () => { closeMenu(); if (!tokenValid()) await signIn(); else refresh(); };
+$("offlineAll").onclick = saveAllOffline;
+$("signOut").onclick = signOut;
+$("search").oninput = (e) => { state.query = e.target.value; renderList(); };
+document.querySelectorAll(".sort button").forEach((b) => b.onclick = () => { state.sort = b.dataset.sort; store.set("flps.sort", state.sort); renderList(); });
+$("list").onclick = (e) => {
+  const b = e.target.closest(".track"); if (!b) return;
+  const t = state.tracks.find((x) => x.id === b.dataset.id);
+  if (state.current?.id === t.id && !state.rev && isLoaded()) togglePlay(); else play(t);
+};
+$("miniPlay").onclick = togglePlay; $("bigPlay").onclick = togglePlay;
+$("miniOpen").onclick = openSheet; $("sheetClose").onclick = closeSheet;
+$("back").onclick = () => seekBy(-10); $("fwd").onclick = () => seekBy(10);
+$("pads").onclick = (e) => { const p = e.target.closest(".pad"); if (p && audio.duration) audio.currentTime = (Number(p.dataset.i) / 16) * audio.duration; };
+$("versions").onclick = (e) => {
+  const b = e.target.closest("[data-rev]"); if (!b || !state.current) return;
+  const i = state.revisions.findIndex((r) => r.id === b.dataset.rev);
+  play(state.current, i === 0 ? null : state.revisions[i]);
+};
+["play", "pause", "loadedmetadata", "emptied"].forEach((ev) => audio.addEventListener(ev, renderPlayer));
+audio.addEventListener("timeupdate", renderPads);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") { closeSheet(); closeMenu(); } });
+document.addEventListener("visibilitychange", () => { if (!document.hidden && tokenValid()) refresh(); });
+setInterval(() => { if (!document.hidden && tokenValid()) refresh(); }, 120000);
+
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+
+buildPads();
+setupDownloads();
+loadOfflineSet().then(() => { route(); if (tokenValid()) refresh(); });
+</script>
+</body>
+</html>

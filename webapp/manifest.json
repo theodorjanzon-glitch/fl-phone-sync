@@ -1,0 +1,15 @@
+{
+  "name": "FL Phone Sync",
+  "short_name": "FL Sync",
+  "description": "Listen to the latest versions of your FL Studio projects.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1D2029",
+  "theme_color": "#1D2029",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
