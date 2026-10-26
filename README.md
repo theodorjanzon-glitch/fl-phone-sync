@@ -44,6 +44,40 @@ Repository **Settings → Pages → Source: GitHub Actions**. Then **Actions →
 ### 5. Build the computer app
 **Releases → Draft a new release**, create a tag like `v1.0.0`, publish. GitHub builds `FL-Phone-Sync-Windows.exe` and `FL-Phone-Sync-Mac.zip` and attaches them (about 5 minutes). The download buttons on the phone app's page always point to the newest release, so that page doubles as your download site.
 
+### 6. Mac signing (needed before Mac users can install it easily)
+
+Since macOS 15, an unsigned app can't be opened with a right-click anymore. Users have to dig into **System Settings → Privacy & Security → Open Anyway** and enter their password. Most people give up there, so for Mac users this step matters.
+
+1. Join the **Apple Developer Program** (99 USD/year) at <https://developer.apple.com/programs/>.
+2. In Xcode or the developer website, create a **Developer ID Application** certificate. Export it from Keychain Access as a `.p12` file with a password.
+3. Create an **app-specific password** at <https://account.apple.com> (Sign-In and Security → App-Specific Passwords).
+4. Add these repository secrets:
+
+| Name | Value |
+|---|---|
+| `MAC_CERT_P12_BASE64` | The `.p12` file as base64 (`base64 -i cert.p12 \| pbcopy` on a Mac) |
+| `MAC_CERT_PASSWORD` | The `.p12` password |
+| `MAC_SIGN_IDENTITY` | e.g. `Developer ID Application: Your Name (TEAMID)` |
+| `APPLE_ID` | Your Apple ID email |
+| `APPLE_TEAM_ID` | Your 10-character team ID |
+| `APPLE_APP_PASSWORD` | The app-specific password |
+
+The next release is then signed and notarized by Apple automatically, and opens with a normal double-click. Without these secrets the build still works, just unsigned.
+
+Windows is milder: unsigned apps show "Windows protected your PC" with **More info → Run anyway**. You can fix that later with a code-signing service such as Azure Trusted Signing.
+
+## Launch checklist
+
+| # | Step | Cost |
+|---|---|---|
+| 1 | GitHub repo + secrets + Pages (steps 1–4) | Free |
+| 2 | Google project published to production (step 2) | Free |
+| 3 | Apple Developer Program + signing secrets (step 6) | 99 USD/year |
+| 4 | Release `v0.1.0` (step 5), check the Actions run is green | Free |
+| 5 | First real user on a Mac: install, sign in, save a project in FL, check it plays on the phone | – |
+| 6 | First real user on Windows: same | – |
+| 7 | Share the phone app link – it's also the download page | – |
+
 ---
 
 ## How syncing works
@@ -57,13 +91,15 @@ Repository **Settings → Pages → Source: GitHub Actions**. Then **Actions →
 | Upload | The track on Drive is updated rather than duplicated, so Drive keeps older uploads as versions (about 30 days). The phone shows them under **Versions**. |
 | Every 5 minutes | A full folder check catches anything missed, including changes made while the computer app was closed. |
 
-First run renders only projects changed in the last 30 days. **Settings → Render all projects** does the rest. Settings also has an optional **export folder**: audio exported from FL into it is uploaded too, which is the fallback if automatic rendering doesn't work on someone's setup.
+First run renders only projects changed in the last 30 days. **Settings → Render all projects** does the rest.
+
+**Export folder:** anything exported from FL into `Music/FL Phone Sync` is uploaded too. On a Mac, if FL Studio turns out not to support automatic rendering, the app notices within 5 minutes, turns automatic rendering off and tells the user to export into this folder instead.
 
 ## Good to know
 
-- **First-launch warnings.** Without code signing, Windows shows "Windows protected your PC" (click *More info → Run anyway*) and Mac says the app is from an unidentified developer (right-click → *Open* the first time). Removing these needs an Apple Developer account (99 USD/year) and a Windows code-signing certificate. Worth it once you have real users.
+- **First-launch permission on Mac.** macOS asks whether FL Phone Sync may access the Documents folder (where FL keeps projects). Users need to click **Allow**.
 - **The Mac build is for Apple Silicon Macs** (M1 and newer).
-- **Mac auto-rendering is experimental**, since FL's command-line renderer is documented for Windows. The export folder works on both.
+- **Mac auto-rendering is unconfirmed**, since FL's command-line renderer is documented for Windows. The app falls back to the export folder automatically if it doesn't work.
 - Closing the computer app's window keeps it syncing in the background. **Settings → Quit** stops it.
 
 ## Automatic testing on Mac and Windows
@@ -72,7 +108,7 @@ Every push to GitHub runs **Actions → Test on Mac and Windows** on real Mac an
 
 | Step | Checks |
 |---|---|
-| 1 | 9 engine tests: autosave/Backup filtering, paths with spaces, render → encode → upload with a fake FL Studio, unchanged saves skipped, real changes update the same Drive file, old projects skipped on first run, waiting while FL is open, export folder + FLAC, start-at-login on/off |
+| 1 | 10 engine tests: autosave/Backup filtering, paths with spaces, render → encode → upload with a fake FL Studio, unchanged saves skipped, real changes update the same Drive file, old projects skipped on first run, waiting while FL is open, export folder + FLAC, start-at-login on/off, Mac fallback when FL can't render |
 | 2 | Opens the real window from source, encodes a test tone, screenshots both screens |
 | 3 | Builds the app exactly like a release |
 | 4 | Launches the built app and does the same checks, which proves the packaged app (including ffmpeg) works |
